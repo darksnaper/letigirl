@@ -21,13 +21,43 @@ export interface FinishedTournament {
 /**
  * Получить следующую пару в личном турнире пользователя
  */
+import { REAL_CONTESTANTS } from '../../prisma/seed';
+
 export async function getNextPair(
   sessionId: string
 ): Promise<NextMatchPair | FinishedTournament | null> {
   // 1. Получаем всех активных девушек
-  const allActive = await prisma.contestant.findMany({
+  let allActive = await prisma.contestant.findMany({
     where: { isActive: true },
   });
+
+  if (allActive.length < 2) {
+    // Автоматическое наполнение 27 участницами при пустой базе
+    try {
+      for (const c of REAL_CONTESTANTS) {
+        await prisma.contestant.create({
+          data: {
+            name: c.name,
+            faculty: c.faculty,
+            course: c.course,
+            photoUrl: c.photoUrl,
+            bio: c.bio,
+            elo: 1500,
+            matchesCount: 0,
+            wins: 0,
+            losses: 0,
+            tournamentWins: 0,
+            isActive: true,
+          },
+        });
+      }
+      allActive = await prisma.contestant.findMany({
+        where: { isActive: true },
+      });
+    } catch (e) {
+      console.error('Auto-seed failed:', e);
+    }
+  }
 
   if (allActive.length < 2) {
     return null;
