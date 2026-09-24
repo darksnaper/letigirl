@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# UniVote — Университетское веб-приложение для парного голосования
 
-## Getting Started
+Современное веб-приложение для справедливого парного голосования за звание самой красивой студентки университета с честным алгоритмом рейтинга **Elo**, сбалансированным подбором пар, открытым лидербордом и защищенной панелью администратора.
 
-First, run the development server:
+---
 
+## Ключевые возможности и справедливость алгоритма
+
+1. **Честный рейтинг Elo с адаптивным $K$-фактором**:
+   - Базовый рейтинг: **1500 Elo**.
+   - Новые участницы получают $K=32$ (быстрая калибровка и сходимость к реальному рейтингу).
+   - После 15 матчей $K=24$, после 30 матчей $K=16$ (стабильность для ветеранов).
+   - Победа над сильной соперницей приносит значительно больше баллов, чем над слабой.
+2. **Умный подбор пар (Matchmaking & Exploration/Exploitation)**:
+   - **Балансировка показов**: Алгоритм отслеживает количество показов каждой девушки и в первую очередь предлагает тех, кто получил меньше голосов, исключая эффект «недооцененности».
+   - **Близкие соперницы**: В пару подбирается кандидатка со схожим рейтингом ($|\Delta Elo| \le 150$).
+   - **Рандомизация стороны**: Позиции (слева/справа) перемешиваются со случайной вероятностью 50%, исключая привычку пользователей кликать одну сторону.
+3. **Гибкость количества выборов и сессии**:
+   - Пользователь может сделать **1 выбор**, **5 выборов** или **продолжать сколько угодно**.
+   - Каждый отдельный голос сразу честно обновляет глобальный рейтинг.
+   - Алгоритм отслеживает историю сессии и **никогда не показывает одну и ту же пару дважды** одному человеку.
+   - Защита от спам-кликов и ботов (rate-limiting по времени между кликами).
+4. **Удобный интерфейс**:
+   - Поддержка горячих клавиш: `1` или `←` (левая), `2` или `→` (правая), `Пробел` (пропустить пару).
+   - Кнопка увеличения фото во весь экран в высоком разрешении.
+   - Праздничные анимации (confetti) и уведомления при достижении серий (1, 5, 10 выборов).
+   - Таблица лидеров с пьедесталом топ-3 (золото, серебро, бронза), фильтрами по факультетам, курсам и поиском.
+5. **Панель организатора (`/admin`)**:
+   - Вход по паролю администратора (по умолчанию: `admin`).
+   - Добавление участниц с загрузкой фото с устройства или по URL.
+   - Включение/отключение участниц из показа (без удаления истории).
+   - Кнопка генерации демо-данных с 12 реальными профилями и фото.
+   - Сброс статистики и Elo к начальным 1500 для перезапуска сезона.
+
+---
+
+## Быстрый запуск
+
+### 1. Переход в папку проекта
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd univote
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Запуск сервера разработки
+```bash
+npm run dev
+```
+Приложение откроется по адресу: **http://localhost:3000**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Сборка и запуск в production
+```bash
+npm run build
+npm start
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## Доступные страницы
 
-To learn more about Next.js, take a look at the following resources:
+- **Главная (Дуэли)**: `http://localhost:3000/`
+- **Таблица лидеров**: `http://localhost:3000/leaderboard`
+- **Панель администратора**: `http://localhost:3000/admin` (пароль: `admin`, настраивается в файле `.env`)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Структура проекта
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/app/page.tsx` — Главная страница голосования
+- `src/app/leaderboard/page.tsx` — Таблица лидеров
+- `src/app/admin/page.tsx` — Панель администратора
+- `src/lib/elo.ts` — Формулы Elo, ожидаемый счет и динамический K-фактор
+- `src/lib/matchmaking.ts` — Алгоритм честного подбора пар
+- `src/lib/session.ts` — Сессионные куки и учет голосов
+- `prisma/schema.prisma` — Схема SQLite базы данных
+- `prisma/seed.ts` — Стартовый набор участниц университета

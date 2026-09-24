@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Contestant {
+  id             String   @id @default(cuid())
+  name           String
+  faculty        String
+  course         Int      @default(1)
+  photoUrl       String
+  bio            String?
+  elo            Float    @default(1500.0)
+  matchesCount   Int      @default(0)
+  wins           Int      @default(0)
+  losses         Int      @default(0)
+  tournamentWins Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  matchesWon     Match[]  @relation("WinnerMatches")
+  matchesLost    Match[]  @relation("LoserMatches")
+}
+
+model Match {
+  id              String     @id @default(cuid())
+  contestant1Id   String
+  contestant2Id   String
+  winnerId        String
+  loserId         String
+  eloBeforeWinner Float
+  eloBeforeLoser  Float
+  eloAfterWinner  Float
+  eloAfterLoser   Float
+  eloDeltaWinner  Float
+  eloDeltaLoser   Float
+  sessionId       String
+  createdAt       DateTime   @default(now())
+
+  winner          Contestant @relation("WinnerMatches", fields: [winnerId], references: [id], onDelete: Cascade)
+  loser           Contestant @relation("LoserMatches", fields: [loserId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([winnerId])
+  @@index([loserId])
+}
+
+model VoteSession {
+  sessionId   String   @id
+  votesCount  Int      @default(0)
+  lastVotedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
+
+model SessionPairHistory {
+  id            String   @id @default(cuid())
+  sessionId     String
+  contestantAId String
+  contestantBId String
+  createdAt     DateTime @default(now())
+
+  @@unique([sessionId, contestantAId, contestantBId])
+  @@index([sessionId])
+}
+
+model TournamentSession {
+  sessionId       String   @id
+  currentStage    Int      @default(1)
+  stageName       String   @default("Первый раунд")
+  activePoolIds   String   @default("[]") // JSON string of IDs waiting to duel in current stage
+  stageWinnersIds String   @default("[]") // JSON string of IDs who won in current stage
+  currentPairAId  String?
+  currentPairBId  String?
+  matchesInStage  Int      @default(0)
+  totalInStage    Int      @default(0)
+  championId      String?
+  isFinished      Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
