@@ -35,10 +35,10 @@ export async function GET() {
     }
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching next match pair:', error);
     return NextResponse.json(
-      { success: false, error: 'Ошибка при подборе пары' },
+      { success: false, error: error?.message || 'Ошибка при подборе пары' },
       { status: 500 }
     );
   }
