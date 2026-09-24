@@ -21,7 +21,7 @@ export interface FinishedTournament {
 /**
  * Получить следующую пару в личном турнире пользователя
  */
-import { REAL_CONTESTANTS } from '../../prisma/seed';
+import { REAL_CONTESTANTS } from './contestants-data';
 
 export async function getNextPair(
   sessionId: string

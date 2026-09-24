@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
-import { REAL_CONTESTANTS } from '../../../../prisma/seed';
+import { REAL_CONTESTANTS } from '@/lib/contestants-data';
 
 export async function POST(req: NextRequest) {
   try {
