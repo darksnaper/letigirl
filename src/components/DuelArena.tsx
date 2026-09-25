@@ -174,55 +174,9 @@ export const DuelArena: React.FC<DuelArenaProps> = ({ onVoteSuccess }) => {
         <h2 className="text-xl font-bold text-white mb-1">
           {firstName} — твой топ-1! 👑
         </h2>
-        <p className="text-zinc-400 text-xs mb-5">
+        <p className="text-zinc-400 text-xs mb-6">
           Она победила во всех этапах твоего персонального турнира.
         </p>
-
-        {/* Podium for 2nd and 3rd place */}
-        {(runnerUp || thirdPlace) && (
-          <div className="grid grid-cols-2 gap-2.5 mb-6 text-left">
-            {runnerUp && (
-              <div className="p-3 rounded-2xl bg-zinc-950/80 border border-slate-400/30 flex items-center gap-2.5">
-                <div className="w-11 h-11 rounded-xl overflow-hidden bg-zinc-800 shrink-0 border border-white/10">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={runnerUp.photoUrl}
-                    alt={runnerUp.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] uppercase font-bold text-slate-300">
-                    🥈 2 место
-                  </div>
-                  <div className="text-xs font-bold text-white truncate">
-                    {runnerUp.name.trim().split(/\s+/)[0]}
-                  </div>
-                </div>
-              </div>
-            )}
-            {thirdPlace && (
-              <div className="p-3 rounded-2xl bg-zinc-950/80 border border-amber-700/30 flex items-center gap-2.5">
-                <div className="w-11 h-11 rounded-xl overflow-hidden bg-zinc-800 shrink-0 border border-white/10">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={thirdPlace.photoUrl}
-                    alt={thirdPlace.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] uppercase font-bold text-amber-500">
-                    🥉 3 место
-                  </div>
-                  <div className="text-xs font-bold text-white truncate">
-                    {thirdPlace.name.trim().split(/\s+/)[0]}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="flex flex-col gap-2.5">
           <Link
