@@ -594,7 +594,7 @@ export async function advanceTournamentPair(
         where: { sessionId },
         data: {
           currentStage: 80,
-          stageName: 'Матч за 3-е место 🥉',
+          stageName: 'Полуфинал',
           currentPairAId: bronzeC1.id,
           currentPairBId: bronzeC2.id,
           activePoolIds: JSON.stringify(finalists), // сохраняем финалисток для Гранд-финала
@@ -609,7 +609,7 @@ export async function advanceTournamentPair(
       return {
         contestant1: left,
         contestant2: right,
-        stageName: 'Матч за 3-е место 🥉',
+        stageName: 'Полуфинал',
         currentStage: 80,
         matchIndexInStage: 1,
         totalMatchesInStage: 1,
