@@ -218,20 +218,68 @@ export async function advanceTournamentPair(
         : tournament.currentPairAId!;
 
     let thirdPlaceId: string | null = null;
+    let fourthPlaceId: string | null = null;
     try {
       const bronzeData = JSON.parse(tournament.activePoolIds || '[]');
       if (bronzeData.length > 0) thirdPlaceId = bronzeData[0];
+      if (bronzeData.length > 1) fourthPlaceId = bronzeData[1];
     } catch {}
 
     const champion = contestantsMap.get(championId)!;
     const runnerUp = contestantsMap.get(runnerUpId) || null;
     const thirdPlace = thirdPlaceId ? contestantsMap.get(thirdPlaceId) || null : null;
+    const fourthPlace = fourthPlaceId ? contestantsMap.get(fourthPlaceId) || null : null;
 
-    // Увеличиваем счетчик побед чемпионке
-    await prisma.contestant.update({
-      where: { id: championId },
-      data: { tournamentWins: { increment: 1 } },
-    });
+    // Гарантируем, что рейтинг и лидерборд отражают точный пьедестал турнира:
+    // 1. Чемпионка
+    // 2. Вице-чемпионка (финалистка)
+    // 3. Бронзовая призёрка (победительница матча за 3-е место)
+    // 4. Участница матча за 3-е место
+    const baseTopElo = Math.max(champion.elo, 1600);
+    const updates = [
+      prisma.contestant.update({
+        where: { id: championId },
+        data: {
+          tournamentWins: { increment: 1 },
+          elo: Math.max(champion.elo, baseTopElo),
+        },
+      }),
+    ];
+
+    if (runnerUpId) {
+      updates.push(
+        prisma.contestant.update({
+          where: { id: runnerUpId },
+          data: {
+            elo: Math.max(runnerUp?.elo || 1500, baseTopElo - 20),
+          },
+        })
+      );
+    }
+
+    if (thirdPlaceId) {
+      updates.push(
+        prisma.contestant.update({
+          where: { id: thirdPlaceId },
+          data: {
+            elo: Math.max(thirdPlace?.elo || 1500, baseTopElo - 40),
+          },
+        })
+      );
+    }
+
+    if (fourthPlaceId) {
+      updates.push(
+        prisma.contestant.update({
+          where: { id: fourthPlaceId },
+          data: {
+            elo: Math.min(fourthPlace?.elo || 1500, baseTopElo - 55),
+          },
+        })
+      );
+    }
+
+    await prisma.$transaction(updates);
 
     // Завершаем турнир и сохраняем пьедестал в stageWinnersIds
     await prisma.tournamentSession.update({
@@ -239,7 +287,7 @@ export async function advanceTournamentPair(
       data: {
         isFinished: true,
         championId,
-        stageWinnersIds: JSON.stringify({ runnerUpId, thirdPlaceId }),
+        stageWinnersIds: JSON.stringify({ runnerUpId, thirdPlaceId, fourthPlaceId }),
         currentPairAId: null,
         currentPairBId: null,
         activePoolIds: '[]',
@@ -258,6 +306,10 @@ export async function advanceTournamentPair(
   // ЭТАП 2: МЫ В МАТЧЕ ЗА 3-Е МЕСТО 🥉
   if (tournament.currentStage === 80) {
     const thirdPlaceId = winnerId || tournament.currentPairAId!;
+    const fourthPlaceId =
+      tournament.currentPairAId === thirdPlaceId
+        ? tournament.currentPairBId!
+        : tournament.currentPairAId!;
 
     // Достаем финалисток для Гранд-финала из activePoolIds
     let finalists: string[] = [];
@@ -276,7 +328,7 @@ export async function advanceTournamentPair(
           stageName: 'Гранд-финал 👑',
           currentPairAId: finalC1.id,
           currentPairBId: finalC2.id,
-          activePoolIds: JSON.stringify([thirdPlaceId]), // сохраняем бронзовую призёрку
+          activePoolIds: JSON.stringify([thirdPlaceId, fourthPlaceId]), // сохраняем 3-е и 4-е место
           matchesInStage: 1,
           totalInStage: 1,
         },
@@ -296,18 +348,27 @@ export async function advanceTournamentPair(
     }
   }
 
-  // СТАНДАРТНАЯ СЕТКА
+  // СТАНДАРТНАЯ СЕТКА И ПРОДВИЖЕНИЕ
   let activePool: string[] = JSON.parse(tournament.activePoolIds || '[]');
-  let stageWinners: string[] = JSON.parse(tournament.stageWinnersIds || '[]');
-  const isConsolation = tournament.currentStage === 15;
+  let stageWinners: string[] = [];
+  try {
+    const parsed = JSON.parse(tournament.stageWinnersIds || '[]');
+    stageWinners = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    stageWinners = [];
+  }
 
-  if (winnerId && !isConsolation) {
+  const isConsolation = tournament.currentStage === 15;
+  const isWildcardMatch = tournament.currentStage === 16;
+
+  // Добавляем победителя матча в список победителей текущего этапа
+  if (winnerId) {
     if (!stageWinners.includes(winnerId)) {
       stageWinners.push(winnerId);
     }
   }
 
-  // Если в текущем пуле раунда есть пары
+  // Если в текущем пуле раунда есть еще пары
   if (activePool.length >= 2) {
     const nextC1Id = activePool[0];
     const nextC2Id = activePool[1];
@@ -338,29 +399,33 @@ export async function advanceTournamentPair(
       isFinished: false,
     };
   } else if (activePool.length === 1) {
-    if (!isConsolation) {
+    if (!stageWinners.includes(activePool[0])) {
       stageWinners.push(activePool[0]);
     }
     activePool = [];
   }
 
+  // =========================================================================
   // РАУНД ЗАВЕРШЕН — ПЕРЕХОД К СЛЕДУЮЩЕМУ ЭТАПУ!
-  const winnersCount = stageWinners.length;
+  // =========================================================================
 
-  // ДОПОЛНЕНИЕ: Утешительный раунд для проигравших в 1-м круге
+  // ЭТАП А: Завершился 1-й круг (13 матчей).
+  // 14 победительниц идут в основную ветку, а 13 проигравших получают 2-й шанс!
   if (tournament.currentStage === 1) {
     const allIds = Array.from(contestantsMap.keys());
-    const loserIds = allIds.filter((id) => !stageWinners.includes(id));
+    const round1Winners = stageWinners;
+    const loserIds = allIds.filter((id) => !round1Winners.includes(id));
 
     if (loserIds.length >= 2) {
-      const pool = loserIds.map((id) => contestantsMap.get(id)!);
-      const { pairs } = createSeededPairs(pool);
+      const losersPool = loserIds.map((id) => contestantsMap.get(id)!);
+      const { pairs } = createSeededPairs(losersPool);
 
       if (pairs.length > 0) {
         const firstPair = pairs[0];
         const remainingPairs = pairs.slice(1);
         const activePoolIds = remainingPairs.flatMap(([a, b]) => [a.id, b.id]);
 
+        // Сохраняем победительниц 1-го круга в activePoolIds как метаданные или в stageWinnersIds
         await prisma.tournamentSession.update({
           where: { sessionId },
           data: {
@@ -369,7 +434,8 @@ export async function advanceTournamentPair(
             currentPairAId: firstPair[0].id,
             currentPairBId: firstPair[1].id,
             activePoolIds: JSON.stringify(activePoolIds),
-            stageWinnersIds: JSON.stringify(stageWinners), // сохраняем основных победителей!
+            // Сохраняем победительниц 1-го круга в свойстве, а текущих утешительных победителей начинаем с нуля
+            stageWinnersIds: JSON.stringify({ r1Winners: round1Winners, consolationWinners: [] }),
             matchesInStage: 1,
             totalInStage: pairs.length,
           },
@@ -390,8 +456,219 @@ export async function advanceTournamentPair(
     }
   }
 
-  // 1. ЕСЛИ ОСТАЛОСЬ 2 ДЕВУШКИ — СРАЗУ ГРАНД-ФИНАЛ
-  if (winnersCount === 2) {
+  // ЭТАП Б: Завершился Утешительный раунд (Stage 15).
+  // Победительницы утешительного раунда (например, Оля!) борются за Wildcard в Топ-8!
+  if (isConsolation) {
+    let savedR1Winners: string[] = [];
+    let consolationWinners: string[] = stageWinners;
+    try {
+      const meta = JSON.parse(tournament.stageWinnersIds || '{}');
+      if (meta.r1Winners) {
+        savedR1Winners = meta.r1Winners;
+      }
+    } catch {}
+
+    if (consolationWinners.length >= 2) {
+      // Сортируем лучших из утешительного раунда для решающего матча за путевку в Топ-8
+      const sortedConsolation = consolationWinners
+        .map((id) => contestantsMap.get(id)!)
+        .filter(Boolean)
+        .sort((a, b) => b.elo - a.elo || b.wins - a.wins);
+
+      const c1 = sortedConsolation[0];
+      const c2 = sortedConsolation[1];
+
+      await prisma.tournamentSession.update({
+        where: { sessionId },
+        data: {
+          currentStage: 16,
+          stageName: 'Матч за выход в Топ-8 🎯',
+          currentPairAId: c1.id,
+          currentPairBId: c2.id,
+          activePoolIds: '[]',
+          stageWinnersIds: JSON.stringify({ r1Winners: savedR1Winners }),
+          matchesInStage: 1,
+          totalInStage: 1,
+        },
+      });
+
+      const [left, right] = Math.random() > 0.5 ? [c1, c2] : [c2, c1];
+
+      return {
+        contestant1: left,
+        contestant2: right,
+        stageName: 'Матч за выход в Топ-8 🎯',
+        currentStage: 16,
+        matchIndexInStage: 1,
+        totalMatchesInStage: 1,
+        isFinished: false,
+      };
+    } else {
+      // Если осталась одна победительница утешительного раунда — она сразу получает путевку
+      const wildcardId = consolationWinners[0] || savedR1Winners[0];
+      return await startRound2(sessionId, savedR1Winners, wildcardId, contestantsMap);
+    }
+  }
+
+  // ЭТАП В: Завершился решающий стыковой матч за выход в Топ-8 (Stage 16).
+  // Победительница (например, Оля!) получает Wildcard в Топ-8, и мы запускаем 2-й круг!
+  if (isWildcardMatch) {
+    const wildcardWinnerId = winnerId || tournament.currentPairAId!;
+    let savedR1Winners: string[] = [];
+    try {
+      const meta = JSON.parse(tournament.stageWinnersIds || '{}');
+      if (meta.r1Winners) savedR1Winners = meta.r1Winners;
+    } catch {}
+
+    return await startRound2(sessionId, savedR1Winners, wildcardWinnerId, contestantsMap);
+  }
+
+  // ЭТАП Г: Завершился 2-й круг (7 матчей).
+  // 7 победительниц 2-го круга + 1 обладательница Wildcard (Оля!) = РОВНО 8 ДЕВУШЕК В ЧЕТВЕРТЬФИНАЛЕ!
+  if (tournament.currentStage === 2) {
+    let wildcardWinnerId: string | null = null;
+    try {
+      const meta = JSON.parse(tournament.stageWinnersIds || '{}');
+      if (meta.wildcardWinnerId) wildcardWinnerId = meta.wildcardWinnerId;
+    } catch {}
+
+    // Собираем всех 8 участниц четвертьфинала
+    const quarterFinalistsIds = [...stageWinners];
+    if (wildcardWinnerId && !quarterFinalistsIds.includes(wildcardWinnerId)) {
+      quarterFinalistsIds.push(wildcardWinnerId);
+    }
+
+    const qfPool = quarterFinalistsIds
+      .map((id) => contestantsMap.get(id)!)
+      .filter(Boolean)
+      .sort((a, b) => b.elo - a.elo || b.wins - a.wins);
+
+    // Формируем 4 четвертьфинальные пары:
+    // 1-я с 8-й, 2-я с 7-й, 3-я с 6-й, 4-я с 5-й
+    const qfPairs: [Contestant, Contestant][] = [];
+    const len = qfPool.length;
+    for (let i = 0; i < Math.floor(len / 2); i++) {
+      qfPairs.push([qfPool[i], qfPool[len - 1 - i]]);
+    }
+
+    const firstPair = qfPairs[0];
+    const remainingPairs = qfPairs.slice(1);
+    const activePoolIds = remainingPairs.flatMap(([a, b]) => [a.id, b.id]);
+
+    await prisma.tournamentSession.update({
+      where: { sessionId },
+      data: {
+        currentStage: 60,
+        stageName: 'Четвертьфинал',
+        currentPairAId: firstPair[0].id,
+        currentPairBId: firstPair[1].id,
+        activePoolIds: JSON.stringify(activePoolIds),
+        stageWinnersIds: '[]',
+        matchesInStage: 1,
+        totalInStage: qfPairs.length,
+      },
+    });
+
+    const [left, right] = Math.random() > 0.5 ? [firstPair[0], firstPair[1]] : [firstPair[1], firstPair[0]];
+
+    return {
+      contestant1: left,
+      contestant2: right,
+      stageName: 'Четвертьфинал',
+      currentStage: 60,
+      matchIndexInStage: 1,
+      totalMatchesInStage: qfPairs.length,
+      isFinished: false,
+    };
+  }
+
+  // ЭТАП Д: Завершился Четвертьфинал (было 8 участниц, вышли 4 победительницы).
+  // Запускаем ПОЛУФИНАЛ с правильным честным посевом:
+  // Полуфинал 1: Seed 1 против Seed 3
+  // Полуфинал 2: Seed 2 против Seed 4
+  // Чтобы сильнейшие фаворитки (Анастасия и Ралина/Оля) не уничтожали друг друга до финала!
+  if (tournament.currentStage === 60 && stageWinners.length === 4) {
+    const semiPool = stageWinners
+      .map((id) => contestantsMap.get(id)!)
+      .filter(Boolean)
+      .sort((a, b) => b.elo - a.elo || b.wins - a.wins);
+
+    // semiPool: 0 (топ-1), 1 (топ-2), 2 (топ-3), 3 (топ-4)
+    const semiPair1: [Contestant, Contestant] = [semiPool[0], semiPool[2]]; // например, Анастасия против Алины
+    const semiPair2: [Contestant, Contestant] = [semiPool[1], semiPool[3]]; // например, Ралина против Оли
+
+    await prisma.tournamentSession.update({
+      where: { sessionId },
+      data: {
+        currentStage: 70,
+        stageName: 'Полуфинал',
+        currentPairAId: semiPair1[0].id,
+        currentPairBId: semiPair1[1].id,
+        activePoolIds: JSON.stringify([semiPair2[0].id, semiPair2[1].id]),
+        stageWinnersIds: '[]',
+        matchesInStage: 1,
+        totalInStage: 2,
+      },
+    });
+
+    const [left, right] = Math.random() > 0.5 ? [semiPair1[0], semiPair1[1]] : [semiPair1[1], semiPair1[0]];
+
+    return {
+      contestant1: left,
+      contestant2: right,
+      stageName: 'Полуфинал',
+      currentStage: 70,
+      matchIndexInStage: 1,
+      totalMatchesInStage: 2,
+      isFinished: false,
+    };
+  }
+
+  // ЭТАП Е: Завершился Полуфинал (было 4 участницы, вышли 2 финалистки).
+  // Запускаем МАТЧ ЗА 3-Е МЕСТО между двумя проигравшими в полуфинале!
+  if (tournament.currentStage === 70 && stageWinners.length === 2) {
+    const finalists = stageWinners;
+    const semiMatches = await prisma.match.findMany({
+      where: { sessionId },
+      orderBy: { createdAt: 'desc' },
+      take: 2,
+    });
+    const semiLosers = semiMatches.map((m) => m.loserId);
+
+    if (semiLosers.length >= 2 && semiLosers[0] !== semiLosers[1]) {
+      const bronzeC1 = contestantsMap.get(semiLosers[0])!;
+      const bronzeC2 = contestantsMap.get(semiLosers[1])!;
+
+      await prisma.tournamentSession.update({
+        where: { sessionId },
+        data: {
+          currentStage: 80,
+          stageName: 'Матч за 3-е место 🥉',
+          currentPairAId: bronzeC1.id,
+          currentPairBId: bronzeC2.id,
+          activePoolIds: JSON.stringify(finalists), // сохраняем финалисток для Гранд-финала
+          stageWinnersIds: '[]',
+          matchesInStage: 1,
+          totalInStage: 1,
+        },
+      });
+
+      const [left, right] = Math.random() > 0.5 ? [bronzeC1, bronzeC2] : [bronzeC2, bronzeC1];
+
+      return {
+        contestant1: left,
+        contestant2: right,
+        stageName: 'Матч за 3-е место 🥉',
+        currentStage: 80,
+        matchIndexInStage: 1,
+        totalMatchesInStage: 1,
+        isFinished: false,
+      };
+    }
+  }
+
+  // ЭТАП Ж: Если осталось 2 девушки — сразу Гранд-финал
+  if (stageWinners.length === 2) {
     const finalC1 = contestantsMap.get(stageWinners[0])!;
     const finalC2 = contestantsMap.get(stageWinners[1])!;
 
@@ -422,86 +699,8 @@ export async function advanceTournamentPair(
     };
   }
 
-  // 2. ЕСЛИ ТОЛЬКО ЧТО ЗАВЕРШИЛСЯ ПОЛУФИНАЛ (было 4 участницы, вышли 2 победительницы)
-  if (tournament.currentStage === 70 && winnersCount === 2) {
-    // Находим 2 проигравших в полуфинале девушек
-    const finalists = stageWinners;
-    const semiMatches = await prisma.match.findMany({
-      where: { sessionId },
-      orderBy: { createdAt: 'desc' },
-      take: 2,
-    });
-    const semiLosers = semiMatches.map((m) => m.loserId);
-
-    if (semiLosers.length >= 2 && semiLosers[0] !== semiLosers[1]) {
-      const bronzeC1 = contestantsMap.get(semiLosers[0])!;
-      const bronzeC2 = contestantsMap.get(semiLosers[1])!;
-
-      await prisma.tournamentSession.update({
-        where: { sessionId },
-        data: {
-          currentStage: 80,
-          stageName: 'Матч за 3-е место 🥉',
-          currentPairAId: bronzeC1.id,
-          currentPairBId: bronzeC2.id,
-          activePoolIds: JSON.stringify(finalists), // сохраняем финалисток для следующего шага
-          stageWinnersIds: '[]',
-          matchesInStage: 1,
-          totalInStage: 1,
-        },
-      });
-
-      const [left, right] = Math.random() > 0.5 ? [bronzeC1, bronzeC2] : [bronzeC2, bronzeC1];
-
-      return {
-        contestant1: left,
-        contestant2: right,
-        stageName: 'Матч за 3-е место 🥉',
-        currentStage: 80,
-        matchIndexInStage: 1,
-        totalMatchesInStage: 1,
-        isFinished: false,
-      };
-    }
-  }
-
-  // 3. ЕСЛИ ОСТАЛОСЬ 4 ДЕВУШКИ — ЗАПУСКАЕМ ПОЛУФИНАЛ!
-  if (winnersCount === 4) {
-    const pool = stageWinners.map((id) => contestantsMap.get(id)!);
-    const { pairs } = createSeededPairs(pool);
-
-    const firstPair = pairs[0];
-    const secondPair = pairs[1];
-
-    await prisma.tournamentSession.update({
-      where: { sessionId },
-      data: {
-        currentStage: 70,
-        stageName: 'Полуфинал',
-        currentPairAId: firstPair[0].id,
-        currentPairBId: firstPair[1].id,
-        activePoolIds: JSON.stringify([secondPair[0].id, secondPair[1].id]),
-        stageWinnersIds: '[]',
-        matchesInStage: 1,
-        totalInStage: 2,
-      },
-    });
-
-    const [left, right] = Math.random() > 0.5 ? [firstPair[0], firstPair[1]] : [firstPair[1], firstPair[0]];
-
-    return {
-      contestant1: left,
-      contestant2: right,
-      stageName: 'Полуфинал',
-      currentStage: 70,
-      matchIndexInStage: 1,
-      totalMatchesInStage: 2,
-      isFinished: false,
-    };
-  }
-
-  // 4. ОСТАЛОСЬ > 4 ДЕВУШЕК — ЧЕТВЕРТЬФИНАЛ ИЛИ СЛЕДУЮЩИЙ КРУГ
-  const pool = stageWinners.map((id) => contestantsMap.get(id)!);
+  // Универсальный фоллбэк: переход к следующему кругу
+  const pool = stageWinners.map((id) => contestantsMap.get(id)!).filter(Boolean);
   const { pairs, byes } = createSeededPairs(pool);
 
   const firstPair = pairs[0];
@@ -509,8 +708,8 @@ export async function advanceTournamentPair(
   const activePoolIds = remainingPairs.flatMap(([a, b]) => [a.id, b.id]);
   const byesIds = byes.map((b) => b.id);
 
-  const nextStageNum = tournament.currentStage === 15 ? 2 : tournament.currentStage + 1;
-  const nextStageName = winnersCount <= 8 ? 'Четвертьфинал' : `${nextStageNum}-й круг`;
+  const nextStageNum = tournament.currentStage + 1;
+  const nextStageName = `${nextStageNum}-й круг`;
 
   await prisma.tournamentSession.update({
     where: { sessionId },
@@ -533,6 +732,50 @@ export async function advanceTournamentPair(
     contestant2: right,
     stageName: nextStageName,
     currentStage: nextStageNum,
+    matchIndexInStage: 1,
+    totalMatchesInStage: pairs.length,
+    isFinished: false,
+  };
+}
+
+/**
+ * Вспомогательная функция: запуск 2-го круга с сохранением обладательницы Wildcard
+ */
+async function startRound2(
+  sessionId: string,
+  r1WinnersIds: string[],
+  wildcardWinnerId: string,
+  contestantsMap: Map<string, Contestant>
+): Promise<NextMatchPair> {
+  const r1Pool = r1WinnersIds.map((id) => contestantsMap.get(id)!).filter(Boolean);
+  const { pairs } = createSeededPairs(r1Pool);
+
+  const firstPair = pairs[0];
+  const remainingPairs = pairs.slice(1);
+  const activePoolIds = remainingPairs.flatMap(([a, b]) => [a.id, b.id]);
+
+  await prisma.tournamentSession.update({
+    where: { sessionId },
+    data: {
+      currentStage: 2,
+      stageName: '2-й круг',
+      currentPairAId: firstPair[0].id,
+      currentPairBId: firstPair[1].id,
+      activePoolIds: JSON.stringify(activePoolIds),
+      // Сохраняем обладательницу Wildcard в метаданных, чтобы добавить её в Топ-8
+      stageWinnersIds: JSON.stringify({ wildcardWinnerId }),
+      matchesInStage: 1,
+      totalInStage: pairs.length,
+    },
+  });
+
+  const [left, right] = Math.random() > 0.5 ? [firstPair[0], firstPair[1]] : [firstPair[1], firstPair[0]];
+
+  return {
+    contestant1: left,
+    contestant2: right,
+    stageName: '2-й круг',
+    currentStage: 2,
     matchIndexInStage: 1,
     totalMatchesInStage: pairs.length,
     isFinished: false,
