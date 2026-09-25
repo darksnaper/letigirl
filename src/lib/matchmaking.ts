@@ -230,56 +230,16 @@ export async function advanceTournamentPair(
     const thirdPlace = thirdPlaceId ? contestantsMap.get(thirdPlaceId) || null : null;
     const fourthPlace = fourthPlaceId ? contestantsMap.get(fourthPlaceId) || null : null;
 
-    // Гарантируем, что рейтинг и лидерборд отражают точный пьедестал турнира:
-    // 1. Чемпионка
-    // 2. Вице-чемпионка (финалистка)
-    // 3. Бронзовая призёрка (победительница матча за 3-е место)
-    // 4. Участница матча за 3-е место
-    const baseTopElo = Math.max(champion.elo, 1600);
-    const updates = [
-      prisma.contestant.update({
-        where: { id: championId },
-        data: {
-          tournamentWins: { increment: 1 },
-          elo: Math.max(champion.elo, baseTopElo),
-        },
-      }),
-    ];
-
-    if (runnerUpId) {
-      updates.push(
-        prisma.contestant.update({
-          where: { id: runnerUpId },
-          data: {
-            elo: Math.max(runnerUp?.elo || 1500, baseTopElo - 20),
-          },
-        })
-      );
-    }
-
-    if (thirdPlaceId) {
-      updates.push(
-        prisma.contestant.update({
-          where: { id: thirdPlaceId },
-          data: {
-            elo: Math.max(thirdPlace?.elo || 1500, baseTopElo - 40),
-          },
-        })
-      );
-    }
-
-    if (fourthPlaceId) {
-      updates.push(
-        prisma.contestant.update({
-          where: { id: fourthPlaceId },
-          data: {
-            elo: Math.min(fourthPlace?.elo || 1500, baseTopElo - 55),
-          },
-        })
-      );
-    }
-
-    await prisma.$transaction(updates);
+    // Записываем официальную победу в турнире чемпионке (tournamentWins)
+    // и начисляем чемпионский бонус за завоевание титула.
+    // Рейтинг Elo каждой участницы уже честно и объективно обновлялся в каждой дуэли
+    // по формуле Эло (zero-sum), поэтому турнирная сетка не ломает общую математику.
+    await prisma.contestant.update({
+      where: { id: championId },
+      data: {
+        tournamentWins: { increment: 1 },
+      },
+    });
 
     // Завершаем турнир и сохраняем пьедестал в stageWinnersIds
     await prisma.tournamentSession.update({
