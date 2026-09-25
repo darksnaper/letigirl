@@ -78,30 +78,21 @@ export const LeaderboardTable: React.FC = () => {
 
   const getFirstName = (fullName: string) => fullName.trim().split(/\s+/)[0];
 
-  // Группировка топ-3 по набранным баллам (рейтинг Elo)
+  // Группировка топ-3 пьедестала на основе официального ранжирования
   const rankTiers: RankTier[] = [];
 
   // Допускаем на пьедестал только участниц, у которых есть хотя бы 1 победа в дуэлях
   const pool = contestants.filter((c) => c.wins > 0 && c.matchesCount > 0);
 
   if (pool.length > 0) {
-    // Сортируем пул строго по набранным баллам (Elo)
-    const sortedPool = [...pool].sort((a, b) => b.elo - a.elo || b.wins - a.wins);
-
-    // Получаем уникальные значения набранных баллов (округленный рейтинг) по убыванию
-    const distinctScores = Array.from(new Set(sortedPool.map((c) => Math.round(c.elo)))).sort(
-      (a, b) => b - a
-    );
-
-    // 1 МЕСТО: максимальное количество баллов
-    if (distinctScores.length >= 1) {
-      const tier1 = sortedPool
-        .filter((c) => Math.round(c.elo) === distinctScores[0])
-        .slice(0, 4);
-
-      rankTiers.push({
+    const tierDefs: Array<{
+      place: 1 | 2 | 3;
+      label: string;
+      crownEmoji: string;
+      colorClass: RankTier['colorClass'];
+    }> = [
+      {
         place: 1,
-        points: distinctScores[0],
         label: '1 место',
         crownEmoji: '👑',
         colorClass: {
@@ -111,19 +102,9 @@ export const LeaderboardTable: React.FC = () => {
           badge: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-zinc-950',
           glow: 'bg-amber-400',
         },
-        contestants: tier1,
-      });
-    }
-
-    // 2 МЕСТО: второй результат по баллам
-    if (distinctScores.length >= 2) {
-      const tier2 = sortedPool
-        .filter((c) => Math.round(c.elo) === distinctScores[1])
-        .slice(0, 4);
-
-      rankTiers.push({
+      },
+      {
         place: 2,
-        points: distinctScores[1],
         label: '2 место',
         crownEmoji: '🥈',
         colorClass: {
@@ -133,19 +114,9 @@ export const LeaderboardTable: React.FC = () => {
           badge: 'bg-gradient-to-r from-slate-200 to-slate-400 text-zinc-950',
           glow: 'bg-slate-300',
         },
-        contestants: tier2,
-      });
-    }
-
-    // 3 МЕСТО: третий результат по баллам
-    if (distinctScores.length >= 3) {
-      const tier3 = sortedPool
-        .filter((c) => Math.round(c.elo) === distinctScores[2])
-        .slice(0, 4);
-
-      rankTiers.push({
+      },
+      {
         place: 3,
-        points: distinctScores[2],
         label: '3 место',
         crownEmoji: '🥉',
         colorClass: {
@@ -155,7 +126,31 @@ export const LeaderboardTable: React.FC = () => {
           badge: 'bg-gradient-to-r from-amber-600 to-amber-800 text-white',
           glow: 'bg-amber-700',
         },
-        contestants: tier3,
+      },
+    ];
+
+    let poolIndex = 0;
+    for (const def of tierDefs) {
+      if (poolIndex >= pool.length) break;
+      const current = pool[poolIndex];
+      const tierContestants = [current];
+      poolIndex++;
+
+      // Если следующие участницы имеют точно такие же показатели (полная ничья), объединяем в одно место
+      while (
+        poolIndex < pool.length &&
+        Math.round(pool[poolIndex].elo) === Math.round(current.elo) &&
+        pool[poolIndex].wins === current.wins &&
+        pool[poolIndex].matchesCount === current.matchesCount
+      ) {
+        tierContestants.push(pool[poolIndex]);
+        poolIndex++;
+      }
+
+      rankTiers.push({
+        ...def,
+        points: Math.round(current.elo),
+        contestants: tierContestants.slice(0, 4),
       });
     }
   }

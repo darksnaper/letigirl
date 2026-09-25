@@ -36,9 +36,32 @@ export async function GET(req: NextRequest) {
       whereClause.name = { contains: search };
     }
 
-    const contestants = await prisma.contestant.findMany({
-      where: whereClause,
-    });
+    const [contestants, matches, allContestants] = await Promise.all([
+      prisma.contestant.findMany({
+        where: whereClause,
+      }),
+      prisma.match.findMany({
+        select: {
+          winnerId: true,
+          loserId: true,
+        },
+      }),
+      prisma.contestant.findMany({
+        where: { isActive: true },
+        select: { faculty: true, course: true },
+      }),
+    ]);
+
+    // Карта результатов личных встреч (Head-to-Head)
+    const h2hCounts = new Map<string, number>();
+    for (const m of matches) {
+      const key = `${m.winnerId}_${m.loserId}`;
+      h2hCounts.set(key, (h2hCounts.get(key) || 0) + 1);
+    }
+
+    const getH2H = (c1Id: string, c2Id: string) => {
+      return h2hCounts.get(`${c1Id}_${c2Id}`) || 0;
+    };
 
     // Добавляем вычисленный winrate и форматируем
     const list = contestants.map((c) => {
@@ -55,8 +78,35 @@ export async function GET(req: NextRequest) {
     } else if (sortBy === 'matches') {
       list.sort((a, b) => b.matchesCount - a.matchesCount || b.elo - a.elo);
     } else {
-      // По умолчанию рейтинг Elo
-      list.sort((a, b) => b.elo - a.elo || b.winrate - a.winrate);
+      // По умолчанию рейтинг Elo с учетом Head-to-Head (очных встреч) при разнице <= 3 Elo
+      list.sort((a, b) => {
+        const eloDiff = Math.abs(a.elo - b.elo);
+        // Если разница больше статистической погрешности (3 очка), решает Elo
+        if (eloDiff > 3) {
+          return b.elo - a.elo;
+        }
+
+        // В пределах статистической погрешности (<= 3 очков):
+        // 1. Очные встречи (Head-to-Head): кто побеждал чаще в личных дуэлях
+        const h2hA = getH2H(a.id, b.id);
+        const h2hB = getH2H(b.id, a.id);
+        if (h2hA !== h2hB) {
+          return h2hB - h2hA;
+        }
+
+        // 2. Если личные встречи равны (или не играли друг с другом), преимущество у более высокого Elo
+        if (b.elo !== a.elo) {
+          return b.elo - a.elo;
+        }
+
+        // 3. Общий винрейт
+        if (b.winrate !== a.winrate) {
+          return b.winrate - a.winrate;
+        }
+
+        // 4. Общее количество побед
+        return b.wins - a.wins;
+      });
     }
 
     // Присваиваем ранг
@@ -64,12 +114,6 @@ export async function GET(req: NextRequest) {
       rank: index + 1,
       ...item,
     }));
-
-    // Получаем уникальные факультеты и курсы для фильтров
-    const allContestants = await prisma.contestant.findMany({
-      where: { isActive: true },
-      select: { faculty: true, course: true },
-    });
 
     const faculties = Array.from(new Set(allContestants.map((c) => c.faculty))).sort();
     const courses = Array.from(new Set(allContestants.map((c) => c.course))).sort((a, b) => a - b);
