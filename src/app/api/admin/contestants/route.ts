@@ -141,7 +141,13 @@ export async function PATCH(req: NextRequest) {
       const formData = await req.formData();
       id = formData.get('id') as string;
 
-      if (formData.has('name')) updateData.name = formData.get('name') as string;
+      if (formData.has('name')) {
+        const trimmedName = ((formData.get('name') as string) || '').trim();
+        if (!trimmedName) {
+          return NextResponse.json({ success: false, error: 'Имя не может быть пустым' }, { status: 400 });
+        }
+        updateData.name = trimmedName;
+      }
       if (formData.has('faculty')) updateData.faculty = formData.get('faculty') as string;
       if (formData.has('course')) updateData.course = Number(formData.get('course'));
       if (formData.has('bio')) updateData.bio = formData.get('bio') as string;
@@ -170,7 +176,13 @@ export async function PATCH(req: NextRequest) {
       const { isActive, name, faculty, course, bio, photoUrl } = body;
 
       if (isActive !== undefined) updateData.isActive = isActive;
-      if (name !== undefined) updateData.name = name;
+      if (name !== undefined) {
+        const trimmedName = (typeof name === 'string' ? name : '').trim();
+        if (!trimmedName) {
+          return NextResponse.json({ success: false, error: 'Имя не может быть пустым' }, { status: 400 });
+        }
+        updateData.name = trimmedName;
+      }
       if (faculty !== undefined) updateData.faculty = faculty;
       if (course !== undefined) updateData.course = Number(course);
       if (bio !== undefined) updateData.bio = bio;

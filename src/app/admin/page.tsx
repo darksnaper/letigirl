@@ -21,6 +21,7 @@ import {
   Trophy,
   ListOrdered,
   Search,
+  Pencil,
 } from 'lucide-react';
 import { Contestant } from '@prisma/client';
 import { Navbar } from '@/components/Navbar';
@@ -62,6 +63,12 @@ export default function AdminPage() {
   const [newPreviewUrl, setNewPreviewUrl] = useState<string>('');
   const [isSavingPhoto, setIsSavingPhoto] = useState<boolean>(false);
   const [photoModalError, setPhotoModalError] = useState<string | null>(null);
+
+  // Name editing modal state
+  const [editNameContestant, setEditNameContestant] = useState<Contestant | null>(null);
+  const [editingNameValue, setEditingNameValue] = useState<string>('');
+  const [isSavingName, setIsSavingName] = useState<boolean>(false);
+  const [editNameError, setEditNameError] = useState<string | null>(null);
 
   // Leaderboard filters in admin
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
@@ -293,6 +300,62 @@ export default function AdminPage() {
       setPhotoModalError('Ошибка сети при сохранении фото');
     } finally {
       setIsSavingPhoto(false);
+    }
+  };
+
+  // Open name editing modal
+  const openEditNameModal = (c: Contestant) => {
+    setEditNameContestant(c);
+    setEditingNameValue(c.name);
+    setEditNameError(null);
+  };
+
+  // Save updated contestant name
+  const handleSaveName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editNameContestant) return;
+    const trimmed = editingNameValue.trim();
+    if (!trimmed) {
+      setEditNameError('Имя не может быть пустым');
+      return;
+    }
+
+    try {
+      setIsSavingName(true);
+      setEditNameError(null);
+      const res = await fetch('/api/admin/contestants', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-key': adminKey,
+        },
+        body: JSON.stringify({
+          id: editNameContestant.id,
+          name: trimmed,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setActionMessage({
+          type: 'success',
+          text: `Имя участницы успешно изменено на «${trimmed}»!`,
+        });
+        setEditNameContestant(null);
+        fetchContestants();
+      } else if (res.status === 401) {
+        setIsAuthenticated(false);
+        sessionStorage.removeItem('univote_admin_key');
+        setAuthError('Неверный пароль администратора или сессия истекла. Войдите заново.');
+        setEditNameContestant(null);
+      } else {
+        setEditNameError(data.error || 'Ошибка при изменении имени');
+      }
+    } catch (err) {
+      console.error(err);
+      setEditNameError('Ошибка сети при сохранении имени');
+    } finally {
+      setIsSavingName(false);
     }
   };
 
@@ -743,16 +806,21 @@ export default function AdminPage() {
                         <div>
                           <div className="font-bold text-white text-sm flex items-center gap-2">
                             <span>{c.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => openEditNameModal(c)}
+                              className="text-slate-500 hover:text-blue-400 transition p-0.5 rounded hover:bg-slate-800"
+                              title="Изменить имя"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
                             {!c.isActive && (
                               <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
                                 Отключена
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-slate-400">
-                            {c.faculty} • {c.course} курс
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">
+                          <div className="text-[11px] text-slate-500 mt-1">
                             Рейтинг: <span className="text-rose-400 font-bold">{Math.round(c.elo)} Elo</span> •{' '}
                             Матчей: {c.matchesCount} ({c.wins} В / {c.losses} П)
                           </div>
@@ -760,6 +828,17 @@ export default function AdminPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {/* Кнопка смены имени */}
+                        <button
+                          type="button"
+                          onClick={() => openEditNameModal(c)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/30 text-blue-300 text-xs font-medium transition"
+                          title="Изменить имя участницы"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Изменить имя</span>
+                        </button>
+
                         {/* Кнопка смены фотографии */}
                         <button
                           type="button"
@@ -817,7 +896,7 @@ export default function AdminPage() {
 
               {/* Filters */}
               <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="relative flex-1 sm:w-56">
+                <div className="relative flex-1 sm:w-64">
                   <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
@@ -827,19 +906,6 @@ export default function AdminPage() {
                     className="w-full pl-9 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
                   />
                 </div>
-
-                <select
-                  value={leaderboardFaculty}
-                  onChange={(e) => setLeaderboardFaculty(e.target.value)}
-                  className="px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none"
-                >
-                  <option value="all">Все факультеты</option>
-                  {uniqueFaculties.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
               </div>
             </div>
 
@@ -850,17 +916,16 @@ export default function AdminPage() {
                   <tr>
                     <th className="py-3 px-4 w-12 text-center">Ранг</th>
                     <th className="py-3 px-4">Участница</th>
-                    <th className="py-3 px-4 hidden sm:table-cell">Факультет</th>
                     <th className="py-3 px-4 text-center">Процент побед</th>
                     <th className="py-3 px-4 text-center">Дуэли (В/П)</th>
                     <th className="py-3 px-4 text-center">Elo</th>
-                    <th className="py-3 px-4 text-center">Действие</th>
+                    <th className="py-3 px-4 text-center">Действия</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {fullLeaderboardList.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
+                      <td colSpan={6} className="py-8 text-center text-slate-500 text-xs">
                         Нет данных
                       </td>
                     </tr>
@@ -879,9 +944,6 @@ export default function AdminPage() {
                             <span className="font-semibold text-white">{c.name}</span>
                           </div>
                         </td>
-                        <td className="py-3 px-4 hidden sm:table-cell text-xs text-slate-400">
-                          {c.faculty} ({c.course} курс)
-                        </td>
                         <td className="py-3 px-4 text-center font-bold text-white">
                           {c.winrate}%
                         </td>
@@ -895,14 +957,24 @@ export default function AdminPage() {
                           {Math.round(c.elo)}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <button
-                            type="button"
-                            onClick={() => openPhotoModal(c)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
-                            title="Сменить фото"
-                          >
-                            <Camera className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openEditNameModal(c)}
+                              className="p-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-white transition"
+                              title="Изменить имя"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openPhotoModal(c)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                              title="Сменить фото"
+                            >
+                              <Camera className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -1013,6 +1085,84 @@ export default function AdminPage() {
                   className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition disabled:opacity-50"
                 >
                   {isSavingPhoto ? 'Сохранение...' : 'Сохранить фото'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT NAME MODAL */}
+      {editNameContestant && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          onClick={() => setEditNameContestant(null)}
+        >
+          <div
+            className="relative w-full max-w-md p-6 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setEditNameContestant(null)}
+              className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-blue-400" />
+              Изменить имя участницы
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Текущее имя: <strong className="text-white">{editNameContestant.name}</strong>
+            </p>
+
+            <form onSubmit={handleSaveName} className="space-y-4">
+              <div className="flex items-center gap-4 p-3 rounded-2xl bg-slate-950 border border-slate-800">
+                <div className="w-14 h-16 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={editNameContestant.photoUrl}
+                    alt={editNameContestant.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Новое имя и фамилия
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingNameValue}
+                    onChange={(e) => setEditingNameValue(e.target.value)}
+                    placeholder="Например, Анна Смирнова"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-blue-500 transition"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              {editNameError && (
+                <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-medium">
+                  {editNameError}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditNameContestant(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingName || !editingNameValue.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition disabled:opacity-50"
+                >
+                  {isSavingName ? 'Сохранение...' : 'Сохранить имя'}
                 </button>
               </div>
             </form>

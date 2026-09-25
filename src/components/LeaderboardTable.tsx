@@ -169,56 +169,58 @@ export const LeaderboardTable: React.FC = () => {
           <span>Тройка лидеров</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-          Топ-3 студенток
+          Топ-3 Студентки
         </h1>
         <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-md mx-auto">
-          Определяется по рейтингу дуэлей. Если у участниц одинаковое количество баллов — они делят место.
+          Определяется по рейтингу дуэлей.
         </p>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="mb-8 flex flex-col sm:flex-row gap-3 items-center justify-between">
-        {/* Search */}
-        <div className="relative w-full sm:w-64">
-          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Поиск по имени..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-zinc-900 border border-white/10 rounded-xl text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-white/30 transition"
-          />
-        </div>
+      {/* Filter and Search Bar (hidden on frontend, preserved for future use) */}
+      {false && (
+        <div className="mb-8 flex flex-col sm:flex-row gap-3 items-center justify-between">
+          {/* Search */}
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Поиск по имени..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-zinc-900 border border-white/10 rounded-xl text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-white/30 transition"
+            />
+          </div>
 
-        {/* Dropdowns for Faculty & Course */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <select
-            value={selectedFaculty}
-            onChange={(e) => setSelectedFaculty(e.target.value)}
-            className="flex-1 sm:flex-none px-3 py-2 bg-zinc-900 border border-white/10 rounded-xl text-xs text-zinc-300 focus:outline-none transition"
-          >
-            <option value="all">Все факультеты</option>
-            {filters.faculties.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
+          {/* Dropdowns for Faculty & Course */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <select
+              value={selectedFaculty}
+              onChange={(e) => setSelectedFaculty(e.target.value)}
+              className="flex-1 sm:flex-none px-3 py-2 bg-zinc-900 border border-white/10 rounded-xl text-xs text-zinc-300 focus:outline-none transition"
+            >
+              <option value="all">Все факультеты</option>
+              {filters.faculties.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
 
-          <select
-            value={selectedCourse}
-            onChange={(e) => setSelectedCourse(e.target.value)}
-            className="flex-1 sm:flex-none px-3 py-2 bg-zinc-900 border border-white/10 rounded-xl text-xs text-zinc-300 focus:outline-none transition"
-          >
-            <option value="all">Все курсы</option>
-            {filters.courses.map((c) => (
-              <option key={c} value={c.toString()}>
-                {c} курс
-              </option>
-            ))}
-          </select>
+            <select
+              value={selectedCourse}
+              onChange={(e) => setSelectedCourse(e.target.value)}
+              className="flex-1 sm:flex-none px-3 py-2 bg-zinc-900 border border-white/10 rounded-xl text-xs text-zinc-300 focus:outline-none transition"
+            >
+              <option value="all">Все курсы</option>
+              {filters.courses.map((c) => (
+                <option key={c} value={c.toString()}>
+                  {c} курс
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Top 3 Podium in 1 Row */}
       {loading ? (
@@ -294,14 +296,11 @@ export const LeaderboardTable: React.FC = () => {
                         <span className={tier.colorClass.text}>#{tier.place}</span>
                       </div>
 
-                      {/* Name & Details at bottom */}
+                      {/* Name at bottom */}
                       <div className="absolute bottom-3 left-3 right-3 text-left">
                         <h3 className="text-base sm:text-lg font-bold text-white leading-tight drop-shadow-md">
                           {getFirstName(tier.contestants[0].name)}
                         </h3>
-                        <p className="text-xs text-zinc-300 drop-shadow-sm mt-0.5">
-                          {tier.contestants[0].faculty} • {tier.contestants[0].course} курс
-                        </p>
                       </div>
                     </div>
 
@@ -338,9 +337,6 @@ export const LeaderboardTable: React.FC = () => {
                             <h3 className="text-xs sm:text-sm font-bold text-white leading-tight truncate">
                               {getFirstName(c.name)}
                             </h3>
-                            <p className="text-[10px] text-zinc-300 truncate mt-0.5">
-                              {c.faculty} • {c.course}к
-                            </p>
                           </div>
                         </div>
 
@@ -373,8 +369,7 @@ export const LeaderboardTable: React.FC = () => {
                             <h4 className="text-xs sm:text-sm font-bold text-white truncate">{getFirstName(c.name)}</h4>
                             <span className="text-xs font-bold text-emerald-400 font-mono">{c.winrate}%</span>
                           </div>
-                          <p className="text-[11px] text-zinc-400 truncate">{c.faculty}, {c.course} курс</p>
-                          <p className="text-[10px] text-zinc-500 mt-0.5">{c.wins} побед из {c.matchesCount}</p>
+                          <p className="text-[10px] text-zinc-500 mt-1">{c.wins} побед из {c.matchesCount}</p>
                         </div>
                       </div>
                     ))}

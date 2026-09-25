@@ -83,9 +83,6 @@ export const ContestantCard: React.FC<ContestantCardProps> = ({
             <h2 className="text-2xl font-bold text-white tracking-tight">
               {firstName}
             </h2>
-            <p className="text-xs text-zinc-300 mt-0.5">
-              {contestant.faculty} • {contestant.course} курс
-            </p>
           </div>
         </div>
 

@@ -66,11 +66,6 @@ export const ImageModal: React.FC<ImageModalProps> = ({
 
         <div className="mt-4 text-center">
           <h3 className="text-xl font-bold text-white">{name}</h3>
-          {faculty && (
-            <p className="text-sm text-slate-400 mt-1">
-              {faculty} {course ? `• ${course} курс` : ''}
-            </p>
-          )}
         </div>
       </div>
     </div>

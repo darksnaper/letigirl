@@ -158,7 +158,6 @@ export const DuelArena: React.FC<DuelArenaProps> = ({ onVoteSuccess }) => {
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
           <div className="absolute bottom-3 left-3 right-3 text-left">
             <h2 className="text-2xl font-black text-white">{firstName}</h2>
-            <p className="text-xs text-zinc-300">{champion.faculty} • {champion.course} курс</p>
           </div>
         </div>
 
