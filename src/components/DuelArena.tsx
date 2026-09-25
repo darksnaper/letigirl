@@ -55,6 +55,20 @@ export const DuelArena: React.FC<DuelArenaProps> = ({ onVoteSuccess }) => {
     }
   }, []);
 
+  const handleRestart = async () => {
+    try {
+      setLoading(true);
+      await fetch('/api/match/restart', { method: 'POST' });
+      setIsFinished(false);
+      setChampion(null);
+      await fetchNextPair();
+    } catch (err) {
+      console.error('Failed to restart:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchNextPair();
   }, [fetchNextPair]);
@@ -176,6 +190,12 @@ export const DuelArena: React.FC<DuelArenaProps> = ({ onVoteSuccess }) => {
             <Trophy className="w-4 h-4 text-amber-500" />
             <span>Посмотреть общий рейтинг</span>
           </Link>
+          <button
+            onClick={handleRestart}
+            className="w-full py-3 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white font-semibold text-xs transition"
+          >
+            Пройти турнир ещё раз
+          </button>
         </div>
       </div>
     );
