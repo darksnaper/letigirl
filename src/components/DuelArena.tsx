@@ -15,6 +15,8 @@ interface PairData {
   totalMatchesInStage: number;
   isFinished: boolean;
   champion?: Contestant | null;
+  runnerUp?: Contestant | null;
+  thirdPlace?: Contestant | null;
 }
 
 interface DuelArenaProps {
@@ -24,6 +26,8 @@ interface DuelArenaProps {
 export const DuelArena: React.FC<DuelArenaProps> = ({ onVoteSuccess }) => {
   const [pair, setPair] = useState<PairData | null>(null);
   const [champion, setChampion] = useState<Contestant | null>(null);
+  const [runnerUp, setRunnerUp] = useState<Contestant | null>(null);
+  const [thirdPlace, setThirdPlace] = useState<Contestant | null>(null);
   const [isFinished, setIsFinished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState(false);
@@ -39,11 +43,15 @@ export const DuelArena: React.FC<DuelArenaProps> = ({ onVoteSuccess }) => {
         if (data.data.isFinished) {
           setIsFinished(true);
           setChampion(data.data.champion || null);
+          setRunnerUp(data.data.runnerUp || null);
+          setThirdPlace(data.data.thirdPlace || null);
           setPair(null);
         } else {
           setPair(data.data);
           setIsFinished(false);
           setChampion(null);
+          setRunnerUp(null);
+          setThirdPlace(null);
         }
       } else {
         setPair(null);
@@ -54,20 +62,6 @@ export const DuelArena: React.FC<DuelArenaProps> = ({ onVoteSuccess }) => {
       setLoading(false);
     }
   }, []);
-
-  const handleRestart = async () => {
-    try {
-      setLoading(true);
-      await fetch('/api/match/restart', { method: 'POST' });
-      setIsFinished(false);
-      setChampion(null);
-      await fetchNextPair();
-    } catch (err) {
-      console.error('Failed to restart:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     fetchNextPair();
@@ -100,6 +94,8 @@ export const DuelArena: React.FC<DuelArenaProps> = ({ onVoteSuccess }) => {
             if (data.data.nextPair.isFinished) {
               setIsFinished(true);
               setChampion(data.data.nextPair.champion || null);
+              setRunnerUp(data.data.nextPair.runnerUp || null);
+              setThirdPlace(data.data.nextPair.thirdPlace || null);
               setPair(null);
             } else {
               setPair(data.data.nextPair);
@@ -178,9 +174,55 @@ export const DuelArena: React.FC<DuelArenaProps> = ({ onVoteSuccess }) => {
         <h2 className="text-xl font-bold text-white mb-1">
           {firstName} — твой топ-1! 👑
         </h2>
-        <p className="text-zinc-400 text-xs mb-6">
+        <p className="text-zinc-400 text-xs mb-5">
           Она победила во всех этапах твоего персонального турнира.
         </p>
+
+        {/* Podium for 2nd and 3rd place */}
+        {(runnerUp || thirdPlace) && (
+          <div className="grid grid-cols-2 gap-2.5 mb-6 text-left">
+            {runnerUp && (
+              <div className="p-3 rounded-2xl bg-zinc-950/80 border border-slate-400/30 flex items-center gap-2.5">
+                <div className="w-11 h-11 rounded-xl overflow-hidden bg-zinc-800 shrink-0 border border-white/10">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={runnerUp.photoUrl}
+                    alt={runnerUp.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase font-bold text-slate-300">
+                    🥈 2 место
+                  </div>
+                  <div className="text-xs font-bold text-white truncate">
+                    {runnerUp.name.trim().split(/\s+/)[0]}
+                  </div>
+                </div>
+              </div>
+            )}
+            {thirdPlace && (
+              <div className="p-3 rounded-2xl bg-zinc-950/80 border border-amber-700/30 flex items-center gap-2.5">
+                <div className="w-11 h-11 rounded-xl overflow-hidden bg-zinc-800 shrink-0 border border-white/10">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={thirdPlace.photoUrl}
+                    alt={thirdPlace.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase font-bold text-amber-500">
+                    🥉 3 место
+                  </div>
+                  <div className="text-xs font-bold text-white truncate">
+                    {thirdPlace.name.trim().split(/\s+/)[0]}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex flex-col gap-2.5">
           <Link
@@ -190,12 +232,6 @@ export const DuelArena: React.FC<DuelArenaProps> = ({ onVoteSuccess }) => {
             <Trophy className="w-4 h-4 text-amber-500" />
             <span>Посмотреть общий рейтинг</span>
           </Link>
-          <button
-            onClick={handleRestart}
-            className="w-full py-3 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white font-semibold text-xs transition"
-          >
-            Пройти турнир ещё раз
-          </button>
         </div>
       </div>
     );
