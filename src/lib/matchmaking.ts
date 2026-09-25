@@ -390,7 +390,7 @@ export async function advanceTournamentPair(
           where: { sessionId },
           data: {
             currentStage: 15,
-            stageName: 'Утешительный раунд',
+            stageName: 'Стыковой раунд',
             currentPairAId: firstPair[0].id,
             currentPairBId: firstPair[1].id,
             activePoolIds: JSON.stringify(activePoolIds),
@@ -406,7 +406,7 @@ export async function advanceTournamentPair(
         return {
           contestant1: left,
           contestant2: right,
-          stageName: 'Утешительный раунд',
+          stageName: 'Стыковой раунд',
           currentStage: 15,
           matchIndexInStage: 1,
           totalMatchesInStage: pairs.length,
